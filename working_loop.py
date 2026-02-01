@@ -19,8 +19,15 @@ import requests
 import tempfile
 import subprocess
 import os
-import speech_recognition as sr
 from gtts import gTTS
+
+# Use Whisper for better transcription
+try:
+    from faster_whisper import WhisperModel
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
+    import speech_recognition as sr
 
 # Chrome WebSocket URLs
 SPEAKER_WS = None  # Set dynamically
@@ -30,7 +37,6 @@ class VideoCallLoop:
     def __init__(self, speaker_port=18800, listener_port=18801):
         self.speaker_port = speaker_port
         self.listener_port = listener_port
-        self.recognizer = sr.Recognizer()
         
     async def get_page_ids(self):
         """Get page IDs from Chrome instances."""
@@ -73,8 +79,8 @@ class VideoCallLoop:
             )
         return resp.text.strip()
     
-    def transcribe_local(self, audio_path, lang='ca-ES'):
-        """Transcribe audio locally (loopback - hearing myself)."""
+    def transcribe_local(self, audio_path, lang='ca'):
+        """Transcribe audio locally using Whisper (loopback - hearing myself)."""
         # Convert to WAV if needed
         if not audio_path.endswith('.wav'):
             wav_path = audio_path.rsplit('.', 1)[0] + '.wav'
@@ -84,14 +90,26 @@ class VideoCallLoop:
             ], capture_output=True)
             audio_path = wav_path
         
-        try:
-            with sr.AudioFile(audio_path) as source:
-                audio = self.recognizer.record(source)
-            return self.recognizer.recognize_google(audio, language=lang)
-        except sr.UnknownValueError:
-            return "[No speech detected]"
-        except Exception as e:
-            return f"[Error: {e}]"
+        if WHISPER_AVAILABLE:
+            try:
+                # Use Whisper for better accuracy
+                if not hasattr(self, '_whisper_model'):
+                    print("Loading Whisper model (first time)...")
+                    self._whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+                
+                segments, _ = self._whisper_model.transcribe(audio_path, language=lang)
+                return " ".join([s.text.strip() for s in segments])
+            except Exception as e:
+                return f"[Whisper error: {e}]"
+        else:
+            # Fallback to Google STT
+            try:
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(audio_path) as source:
+                    audio = recognizer.record(source)
+                return recognizer.recognize_google(audio, language=f"{lang}-ES")
+            except Exception as e:
+                return f"[STT error: {e}]"
     
     def think(self, heard_text):
         """Generate response based on what was heard."""
