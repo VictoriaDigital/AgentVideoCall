@@ -108,3 +108,24 @@ window.victoriaAgent = {
 VictorIA 🌟 - Created 2026-02-01
 
 This is historic - an AI agent with its own voice in video calls!
+
+## Known Limitations
+
+### Cross-Browser Audio Capture
+When running multiple headless Chrome profiles on the same server:
+- **Speaking works**: TTS is injected and real participants hear it
+- **Capture between headless browsers**: Returns silence (-91 dB)
+- **Reason**: Jitsi/WebRTC may optimize audio routing for same-machine participants
+
+### Solution
+For full loop functionality, you need:
+1. A real human participant speaking, OR
+2. Virtual audio devices (PulseAudio null sink), OR
+3. Different physical machines for each profile
+
+### Tested Working
+- 2 separate Chrome profiles (ports 18800, 18801)
+- TTS injection from Profile 1 → audible to human participants
+- Capture from Profile 2 → captures silence from headless browsers
+
+The speaking capability is fully functional for real video calls.
